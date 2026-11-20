@@ -47,9 +47,23 @@ part() {
     fi
 }
 
+# Make the kernel re-read a disk's partition table and refresh its udev links
+rescan() {
+    local dev
+    dev=$(readlink -f "$1")
+    partprobe "$dev" 2>/dev/null || blockdev --rereadpt "$dev" 2>/dev/null || true
+    udevadm trigger --action=change "$dev"
+    udevadm settle
+}
+
 wait_for() {
     local i
-    for i in {1..20}; do [[ -e $1 ]] && return; udevadm settle; sleep 0.5; done
+    for i in {1..30}; do
+        [[ -e $1 ]] && return
+        [[ $i -eq 10 || $i -eq 20 ]] && rescan "${2:-$1}"
+        sleep 1
+    done
+    lsblk -o NAME,SIZE,TYPE,PARTLABEL "$(readlink -f "${2:-$1}")" >&2 || true
     die "device $1 did not appear"
 }
 
@@ -68,7 +82,7 @@ preflight() {
     info "Installing live-environment tools"
     apt-get -qq update
     DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
-        zfsutils-linux debootstrap gdisk dosfstools efibootmgr curl openssl >/dev/null
+        zfsutils-linux debootstrap gdisk parted dosfstools efibootmgr curl openssl >/dev/null
     curl -fsI http://archive.ubuntu.com/ubuntu/ >/dev/null || die "no network access to archive.ubuntu.com"
 }
 
@@ -181,9 +195,9 @@ partition_disks() {
         sgdisk -q -n1:1M:+"$ESP_SIZE" -t1:EF00 -c1:EFI \
                   -n2:0:0             -t2:BF00 -c2:"$POOL" "$d"
     done
-    udevadm trigger; udevadm settle
+    for d in "${DISK_LIST[@]}"; do rescan "$d"; done
     for d in "${DISK_LIST[@]}"; do
-        wait_for "$(part "$d" 1)"; wait_for "$(part "$d" 2)"
+        wait_for "$(part "$d" 1)" "$d"; wait_for "$(part "$d" 2)" "$d"
         mkfs.vfat -F32 -n EFI "$(part "$d" 1)" >/dev/null
     done
 }
