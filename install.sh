@@ -83,7 +83,7 @@ select_disks() {
         live=${live:-$src}
     fi
 
-    mapfile -t devs < <(lsblk -dnpo NAME,TYPE | awk '$2=="disk"{print $1}' | grep -vx "${live:-none}")
+    mapfile -t devs < <(lsblk -dnbpo NAME,TYPE,SIZE | awk '$2=="disk" && $3>0 {print $1}' | grep -vx "${live:-none}")
     [[ ${#devs[@]} -gt 0 ]] || die "no disks found"
 
     if [[ -z ${DISKS-} ]]; then
