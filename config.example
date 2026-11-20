@@ -1,0 +1,11 @@
+# Copy to config.env and edit. Every line is optional.
+#DISKS="/dev/disk/by-id/ata-SSD_ONE /dev/disk/by-id/ata-SSD_TWO"
+#TOPOLOGY=mirror
+POOL=rpool
+#NEW_HOSTNAME=server
+#USERNAME=admin
+#GH_USER=-
+#TIMEZONE=America/New_York
+SUITE=resolute
+KERNEL=linux-generic
+ESP_SIZE=1G
