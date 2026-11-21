@@ -396,13 +396,31 @@ finish() {
     info "Unmounting and exporting $POOL"
     local m
     for m in dev proc sys; do umount -Rl "$TARGET/$m" 2>/dev/null || true; done
-    zpool export "$POOL"
+    local i
+    for i in 1 2 3; do
+        zpool export "$POOL" && break
+        if [[ $i -eq 3 ]]; then
+            zpool sync "$POOL"
+            echo "WARN: could not export $POOL (still busy). Data is synced and the host ID"
+            echo "      matches the new system, so it is safe to reboot anyway."
+        fi
+        sleep 3
+    done
     echo
     echo "Done. Remove the USB and reboot. ZFSBootMenu boots $POOL/ROOT/ubuntu."
     echo "Log: $LOG"
 }
 
 # ---------------------------------------------------------------- main
+
+[[ $EUID -eq 0 ]] || die "run as root (sudo -i)"
+
+# Run in a private mount namespace so services started during the install never
+# pick up copies of the /mnt mounts (which would keep the pool busy at export).
+if [[ -z ${ZFSROOT_NS-} ]]; then
+    export ZFSROOT_NS=1
+    exec unshare --mount --propagation private -- "$(readlink -f "$0")" "$@"
+fi
 
 preflight "$@"
 select_disks

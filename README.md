@@ -125,6 +125,9 @@ efibootmgr -c -d /dev/sdX -p 1 -L "ZFSBootMenu (new)" -l '\EFI\ZBM\VMLINUZ.EFI'
   these drives have known queued-TRIM issues on Linux. `autotrim` handles TRIM after install.
 - **`pool ... is already imported` / exported pool exists.** A previous attempt left a pool:
   `zpool destroy <name>` (or `zpool import` then destroy), then rerun.
+- **`cannot export 'rpool': pool is busy`.** The script runs in a private mount namespace to
+  prevent this. If it still happens it warns instead of failing: the pool is synced and the
+  host ID matches the new system, so rebooting is safe.
 - **Rerunning is safe.** Each run wipes and repartitions the selected disks from scratch and
   removes stale ZFSBootMenu boot entries.
 
