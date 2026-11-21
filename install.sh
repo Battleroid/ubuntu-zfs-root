@@ -183,7 +183,20 @@ ask_settings() {
     fi
 
     zpool list -H -o name 2>/dev/null | grep -qx "$POOL" && die "pool $POOL is already imported"
-    zpool import 2>/dev/null | grep -q "pool: $POOL\$" && die "an exported pool named $POOL exists; destroy it or pick another name"
+    # An exported pool with the same name is fine only if it lives on the disks being wiped
+    local ids id ours="" d p
+    ids=$(zpool import 2>/dev/null | awk -v n="$POOL" '$1=="pool:" {f=($2==n)} f && $1=="id:" {print $2}' || true)
+    if [[ -n $ids ]]; then
+        for d in "${DISK_LIST[@]}"; do
+            for p in "$(readlink -f "$d")"?*; do
+                [[ -b $p ]] && ours+=" $(zdb -l "$p" 2>/dev/null | awk '/pool_guid/ {print $2; exit}' || true)"
+            done
+        done
+        for id in $ids; do
+            [[ " $ours " == *" $id "* ]] || die "an exported pool named $POOL exists on other disks; destroy it or pick another name"
+        done
+        echo "Note: existing pool $POOL on the selected disks will be overwritten."
+    fi
     return 0
 }
 
