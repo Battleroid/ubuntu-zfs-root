@@ -17,6 +17,7 @@ git clone https://github.com/Battleroid/ubuntu-zfs-root.git
 cd ubuntu-zfs-root
 ./install.sh                 # prompts for everything
 ./install.sh config.env      # or preset values, see config.example
+./install.sh -d              # debug: print every command with its line number
 ```
 
 The script lists disks (the live USB is hidden), asks which to use, shows a summary and

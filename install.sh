@@ -2,7 +2,7 @@
 # Install Ubuntu onto a ZFS root pool (single, mirror or raidz) booted by ZFSBootMenu.
 # Run as root from an Ubuntu live ISO booted in UEFI mode.
 #
-# Usage: ./install.sh [config.env]
+# Usage: ./install.sh [-d] [config.env]   (-d prints every command as it runs)
 # Any variable below can be preset in the config file; anything unset is prompted for.
 
 set -Eeuo pipefail
@@ -72,7 +72,10 @@ wait_for() {
         [[ $i -eq 10 || $i -eq 20 ]] && rescan "$2"
         sleep 1
     done
+    echo "Kernel view:" >&2
     lsblk -o NAME,SIZE,TYPE,PARTLABEL "$(readlink -f "$2")" >&2 || true
+    echo "udev links:" >&2
+    ls -l /dev/disk/by-id/ | grep -F "$(basename "$(readlink -f "$2")")" >&2 || true
     die "device $1 did not appear"
 }
 
@@ -81,12 +84,17 @@ wait_for() {
 preflight() {
     [[ $EUID -eq 0 ]] || die "run as root (sudo -i)"
     [[ -d /sys/firmware/efi ]] || die "not booted in UEFI mode"
+    if [[ ${1-} == -d ]]; then DEBUG=1; shift; fi
     if [[ -n ${1-} ]]; then
         [[ -f $1 ]] || die "config file $1 not found"
         # shellcheck source=/dev/null
         . "$1"
     fi
     exec > >(tee -a "$LOG") 2>&1
+    if [[ ${DEBUG-} == 1 ]]; then
+        export PS4='+ ${LINENO}: '
+        set -x
+    fi
 
     info "Installing live-environment tools"
     apt-get -qq update
@@ -158,11 +166,13 @@ ask_settings() {
     MIRROR=${MIRROR:-http://archive.ubuntu.com/ubuntu}
 
     if [[ -z ${PASSWORD_HASH-} ]]; then
+        { set +x; } 2>/dev/null   # keep the password out of the log
         local p1 p2
         read -r -s -p "Password for $USERNAME: " p1; echo
         read -r -s -p "Confirm password: " p2; echo
         [[ -n $p1 && $p1 == "$p2" ]] || die "passwords empty or do not match"
         PASSWORD_HASH=$(openssl passwd -6 -stdin <<< "$p1")
+        [[ ${DEBUG-} == 1 ]] && set -x
     fi
 
     zpool list -H -o name 2>/dev/null | grep -qx "$POOL" && die "pool $POOL is already imported"
@@ -209,6 +219,17 @@ partition_disks() {
         wait_for "$(kpart "$d" 1)" "$d"; wait_for "$(kpart "$d" 2)" "$d"
         udevadm settle
         mkfs.vfat -F32 -n EFI "$(part "$d" 1)" >/dev/null
+    done
+    show_partitions
+}
+
+show_partitions() {
+    local d
+    echo "Partitions:"
+    for d in "${DISK_LIST[@]}"; do
+        lsblk -o NAME,SIZE,TYPE,PARTLABEL,FSTYPE "$(readlink -f "$d")"
+        echo "  using: $(part "$d" 1)"
+        echo "         $(part "$d" 2)"
     done
 }
 
