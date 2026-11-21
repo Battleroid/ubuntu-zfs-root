@@ -358,9 +358,11 @@ update-locale LANG=en_US.UTF-8
 ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
 echo "$TIMEZONE" > /etc/timezone
 
-apt-get -qq -y install --no-install-recommends "$KERNEL" >/dev/null
+# ZFS initramfs support first, so the kernel's postinst builds a bootable initrd
+apt-get -qq -y install initramfs-tools zfs-initramfs zfsutils-linux >/dev/null
+apt-get -qq -y install "$KERNEL" >/dev/null
 apt-get -qq -y install \
-    ubuntu-minimal ubuntu-standard zfs-initramfs zfsutils-linux \
+    ubuntu-minimal ubuntu-standard \
     openssh-server sudo netplan.io systemd-resolved \
     dosfstools efibootmgr curl ssh-import-id >/dev/null
 
