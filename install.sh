@@ -219,6 +219,7 @@ partition_disks() {
         if [[ ${DISCARD-n} == y && $(lsblk -dno ROTA "$d") -eq 0 ]]; then
             blkdiscard -f "$d" || true
         fi
+        # sgdisk -q exits 0 without writing on some builds; silence via redirect instead
         sgdisk --zap-all "$d" >/dev/null
         sgdisk -n1:1M:+"$ESP_SIZE" -t1:EF00 -c1:EFI \
                   -n2:0:0             -t2:BF00 -c2:"$POOL" "$d" >/dev/null
