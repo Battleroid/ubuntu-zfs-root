@@ -30,7 +30,8 @@ cd ubuntu-zfs-root
 The script lists disks (the live USB and empty card readers are hidden), asks which to use,
 shows a summary and asks you to type `WIPE` before touching anything.
 
-Use a region timezone such as `America/New_York`; abbreviations like `EST` ignore daylight saving.
+Inputs are validated before anything is wiped. Timezones must be Region/City (e.g.
+`America/New_York`); abbreviations like `EST` are rejected because they ignore daylight saving.
 
 ### Running over SSH
 

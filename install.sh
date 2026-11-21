@@ -16,13 +16,20 @@ trap 'echo "ERROR: line $LINENO: $BASH_COMMAND (see $LOG)" >&2' ERR
 die()  { echo "ERROR: $*" >&2; exit 1; }
 info() { echo; echo "==> $*"; }
 
-# ask VAR "Prompt" [default] - sets VAR unless already set
+# ask VAR "Prompt" [default] [regex] - sets VAR unless already set; re-asks until it matches
 ask() {
-    local var=$1 prompt=$2 def=${3-} reply
-    [[ -n ${!var-} ]] && return
-    read -r -p "$prompt${def:+ [$def]}: " reply
-    printf -v "$var" '%s' "${reply:-$def}"
-    [[ -n ${!var} ]] || die "$var is required"
+    local var=$1 prompt=$2 def=${3-} re=${4-} reply
+    if [[ -n ${!var-} ]]; then
+        [[ -z $re || ${!var} =~ $re ]] || die "invalid $var: ${!var}"
+        return 0
+    fi
+    while true; do
+        read -r -p "$prompt${def:+ [$def]}: " reply
+        reply=${reply:-$def}
+        if [[ -n $reply && ( -z $re || $reply =~ $re ) ]]; then break; fi
+        echo "  invalid value, try again"
+    done
+    printf -v "$var" '%s' "$reply"
 }
 
 # Stable /dev/disk/by-id path for a whole disk, falling back to the kernel name
@@ -162,11 +169,16 @@ select_topology() {
 }
 
 ask_settings() {
-    ask NEW_HOSTNAME "Hostname"
-    ask POOL         "Root pool name" rpool
-    ask USERNAME     "Admin username"
-    ask GH_USER      "GitHub user to import SSH keys from (- for none)" -
-    ask TIMEZONE     "Timezone" "$(cat /etc/timezone 2>/dev/null || echo UTC)"
+    ask NEW_HOSTNAME "Hostname" "" '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$'
+    ask POOL         "Root pool name" rpool '^[A-Za-z][A-Za-z0-9_.:-]*$'
+    ask USERNAME     "Admin username" "" '^[a-z_][a-z0-9_-]{0,31}$'
+    ask GH_USER      "GitHub user to import SSH keys from (- for none)" - '^(-|[A-Za-z0-9-]+)$'
+    while true; do
+        ask TIMEZONE "Timezone, e.g. America/New_York" "$(cat /etc/timezone 2>/dev/null || echo Etc/UTC)"
+        [[ $TIMEZONE != */* || ! -f /usr/share/zoneinfo/$TIMEZONE ]] || break
+        echo "  use a Region/City timezone from /usr/share/zoneinfo"
+        TIMEZONE=""
+    done
     SUITE=${SUITE:-resolute}
     KERNEL=${KERNEL:-linux-generic}
     ESP_SIZE=${ESP_SIZE:-1G}
@@ -385,6 +397,7 @@ for v in $(ls /lib/modules); do
     echo "initramfs OK: $v"
 done
 apt-get -qq clean
+ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 CHROOT
 }
 
@@ -392,7 +405,7 @@ install_zfsbootmenu() {
     info "Installing ZFSBootMenu on every ESP"
     local efi=/root/zbm.efi d dev esp tmp
     curl -fsSL https://get.zfsbootmenu.org/efi -o "$efi"
-    [[ -s $efi ]] || die "ZFSBootMenu download failed"
+    [[ $(head -c2 "$efi") == MZ ]] || die "ZFSBootMenu download is not an EFI binary"
 
     # Remove stale entries from earlier runs
     efibootmgr | awk '/ZFSBootMenu/ {print substr($1, 5, 4)}' | while read -r n; do
