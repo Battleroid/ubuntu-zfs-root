@@ -39,12 +39,21 @@ byid() {
     echo "${fallback:-$dev}"
 }
 
-# Partition N of a disk path
+# Kernel device for partition N of a disk (sdf -> sdf1, nvme0n1 -> nvme0n1p1)
+kpart() {
+    local dev
+    dev=$(readlink -f "$1")
+    if [[ $dev =~ [0-9]$ ]]; then echo "${dev}p$2"; else echo "$dev$2"; fi
+}
+
+# Most stable path for partition N: by-id link, then by-partuuid, then kernel name
 part() {
-    if   [[ $1 == /dev/disk/by-id/* ]]; then echo "$1-part$2"
-    elif [[ $1 =~ [0-9]$ ]];             then echo "${1}p$2"
-    else                                      echo "$1$2"
-    fi
+    local k uuid
+    k=$(kpart "$1" "$2")
+    if [[ $1 == /dev/disk/by-id/* && -e $1-part$2 ]]; then echo "$1-part$2"; return; fi
+    uuid=$(blkid -s PARTUUID -o value "$k" 2>/dev/null || true)
+    if [[ -n $uuid && -e /dev/disk/by-partuuid/$uuid ]]; then echo "/dev/disk/by-partuuid/$uuid"; return; fi
+    echo "$k"
 }
 
 # Make the kernel re-read a disk's partition table and refresh its udev links
@@ -60,10 +69,10 @@ wait_for() {
     local i
     for i in {1..30}; do
         [[ -e $1 ]] && return
-        [[ $i -eq 10 || $i -eq 20 ]] && rescan "${2:-$1}"
+        [[ $i -eq 10 || $i -eq 20 ]] && rescan "$2"
         sleep 1
     done
-    lsblk -o NAME,SIZE,TYPE,PARTLABEL "$(readlink -f "${2:-$1}")" >&2 || true
+    lsblk -o NAME,SIZE,TYPE,PARTLABEL "$(readlink -f "$2")" >&2 || true
     die "device $1 did not appear"
 }
 
@@ -197,7 +206,8 @@ partition_disks() {
     done
     for d in "${DISK_LIST[@]}"; do rescan "$d"; done
     for d in "${DISK_LIST[@]}"; do
-        wait_for "$(part "$d" 1)" "$d"; wait_for "$(part "$d" 2)" "$d"
+        wait_for "$(kpart "$d" 1)" "$d"; wait_for "$(kpart "$d" 2)" "$d"
+        udevadm settle
         mkfs.vfat -F32 -n EFI "$(part "$d" 1)" >/dev/null
     done
 }
