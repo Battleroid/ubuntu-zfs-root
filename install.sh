@@ -75,7 +75,14 @@ wait_for() {
     echo "Kernel view:" >&2
     lsblk -o NAME,SIZE,TYPE,PARTLABEL "$(readlink -f "$2")" >&2 || true
     echo "udev links:" >&2
-    ls -l /dev/disk/by-id/ | grep -F "$(basename "$(readlink -f "$2")")" >&2 || true
+    local link
+    for link in /dev/disk/by-id/*; do
+        [[ $(readlink -f "$link") == "$(readlink -f "$2")"* ]] && echo "  $link" >&2
+    done
+    echo "On-disk table:" >&2
+    sgdisk -p "$(readlink -f "$2")" >&2 || true
+    echo "Kernel log:" >&2
+    dmesg | tail -n 25 >&2 || true
     die "device $1 did not appear"
 }
 
@@ -209,7 +216,9 @@ partition_disks() {
             mdadm --zero-superblock --force "$p" 2>/dev/null || true
         done
         wipefs -aq "$d"
-        [[ $(lsblk -dno ROTA "$d") -eq 0 ]] && { blkdiscard -f "$d" 2>/dev/null || true; }
+        if [[ ${DISCARD-n} == y && $(lsblk -dno ROTA "$d") -eq 0 ]]; then
+            blkdiscard -f "$d" || true
+        fi
         sgdisk -q --zap-all "$d"
         sgdisk -q -n1:1M:+"$ESP_SIZE" -t1:EF00 -c1:EFI \
                   -n2:0:0             -t2:BF00 -c2:"$POOL" "$d"

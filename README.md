@@ -54,6 +54,7 @@ All optional. Anything unset is prompted for.
 | `KERNEL` | `linux-generic` (e.g. `linux-generic-hwe-26.04`) |
 | `ESP_SIZE` | `1G` |
 | `MIRROR` | `http://archive.ubuntu.com/ubuntu` |
+| `DISCARD` | `n`; `y` runs `blkdiscard` on SSDs before partitioning |
 | `CONFIRM` | set to `WIPE` to skip the final confirmation |
 
 ## Not included
