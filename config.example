@@ -8,4 +8,5 @@ POOL=rpool
 #TIMEZONE=America/New_York
 SUITE=resolute
 KERNEL=linux-generic
+# EFI System Partition size per disk; holds only the ZFSBootMenu image (~100MB)
 ESP_SIZE=1G
