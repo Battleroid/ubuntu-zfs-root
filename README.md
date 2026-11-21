@@ -128,6 +128,18 @@ efibootmgr -c -d /dev/sdX -p 1 -L "ZFSBootMenu (new)" -l '\EFI\ZBM\VMLINUZ.EFI'
 - **`cannot export 'rpool': pool is busy`.** The script runs in a private mount namespace to
   prevent this. If it still happens it warns instead of failing: the pool is synced and the
   host ID matches the new system, so rebooting is safe.
+- **ZFSBootMenu: "No boot environments with kernels found".** `/boot` has a kernel but no
+  matching `initrd.img-*`. Repair from the live ISO without reinstalling:
+  ```bash
+  apt update && apt install -y zfsutils-linux
+  zpool import -f -N -R /mnt rpool
+  zfs mount rpool/ROOT/ubuntu && zfs mount -a
+  for m in dev proc sys; do mount --rbind /$m /mnt/$m; done
+  chroot /mnt update-initramfs -c -k all
+  umount -Rl /mnt/dev /mnt/proc /mnt/sys && zpool export rpool
+  ```
+  The installer now creates and verifies the initramfs for every kernel, so new installs
+  should not hit this.
 - **Rerunning is safe.** Each run wipes and repartitions the selected disks from scratch and
   removes stale ZFSBootMenu boot entries.
 

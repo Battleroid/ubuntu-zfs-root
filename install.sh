@@ -373,7 +373,15 @@ if [ "$GH_USER" != "-" ]; then
     su - "$USERNAME" -c "ssh-import-id gh:$GH_USER" || echo "WARN: ssh key import failed"
 fi
 
-update-initramfs -u -k all
+# Create (not just update) an initramfs for every installed kernel and verify it has ZFS
+for v in $(ls /lib/modules); do
+    [ -e "/boot/vmlinuz-$v" ] || continue
+    update-initramfs -c -k "$v" 2>/dev/null || update-initramfs -u -k "$v"
+    [ -s "/boot/initrd.img-$v" ] || { echo "ERROR: no initramfs for $v" >&2; exit 1; }
+    lsinitramfs "/boot/initrd.img-$v" | grep '/zfs\.ko' >/dev/null \
+        || { echo "ERROR: initramfs for $v has no zfs module" >&2; exit 1; }
+    echo "initramfs OK: $v"
+done
 apt-get -qq clean
 CHROOT
 }
